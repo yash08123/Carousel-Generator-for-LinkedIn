@@ -7,7 +7,7 @@ import { AvatarSchema } from "@/lib/validation/avatar-schema";
 import Image from "next/image";
 import { UserCircle } from "lucide-react";
 import { useSelectionContext } from "@/lib/providers/selection-context";
-import { getParent } from "@/lib/field-path";
+import { getParent, getSlideNumber } from "@/lib/field-path";
 import { usePagerContext } from "@/lib/providers/pager-context";
 
 // Define the allowed values for size, alignment and shape
@@ -30,16 +30,23 @@ export function Avatar({ fieldName, className }: AvatarProps) {
   const fieldValue = watch(fieldName as any);
   const style = fieldValue?.style;
   const brandAvatar = watch("config.brand.avatar");
+  const pageNumber = getSlideNumber(fieldName);
+  
+  // Get slide style to check if it's a headshot slide
+  const slideStyle = watch(`slides.${pageNumber}.slideStyle`);
+  const isHeadshotSlide = slideStyle === "IntroHeadshot" || slideStyle === "OutroHeadshot";
 
   // Safely get the values with default fallbacks
   const size = (style?.size as SizeType) || "Medium";
   const alignment = (style?.alignment as AlignmentType) || "Center";
   const shape = (style?.shape as ShapeType) || "Circle";
 
+  // Adjust size classes to be more responsive and prevent overflow in PDFs
+  // Use smaller size for headshot slides to prevent layout issues
   const sizeClasses = {
-    Small: "w-24 h-24",
-    Medium: "w-40 h-40",
-    Large: "w-56 h-56",
+    Small: isHeadshotSlide ? "w-20 h-20" : "w-24 h-24",
+    Medium: isHeadshotSlide ? "w-32 h-32" : "w-40 h-40",
+    Large: isHeadshotSlide ? "w-44 h-44" : "w-56 h-56",
   };
 
   const alignmentClasses = {
@@ -68,7 +75,7 @@ export function Avatar({ fieldName, className }: AvatarProps) {
   return (
     <div 
       className={cn(
-        "flex my-4 w-full justify-center", 
+        "flex my-4 w-full justify-center max-w-full", 
         alignmentClasses[alignment],
         className
       )}
@@ -93,6 +100,7 @@ export function Avatar({ fieldName, className }: AvatarProps) {
             alt="Avatar"
             fill
             className="object-cover"
+            sizes="(max-width: 768px) 100vw, 400px" // Optimize image loading
           />
         </div>
       ) : renderFallback()}

@@ -44,23 +44,24 @@ export function Emoji({ fieldName, className }: EmojiProps) {
   // Safely get the style values with default fallbacks
   const size = (style.size as SizeType) || "Medium";
   const alignment = (style.alignment as AlignmentType) || "Center";
-
+  
+  // Use more responsive size classes that respect container boundaries
   const sizeClasses = {
-    Small: "text-4xl",
-    Medium: "text-6xl",
-    Large: "text-8xl",
+    Small: "text-4xl max-w-[95%]",
+    Medium: "text-6xl max-w-[95%]",
+    Large: "text-8xl max-w-[90%]",
   };
-
+  
   const alignmentClasses = {
     Left: "text-left self-start",
     Center: "text-center self-center",
     Right: "text-right self-end",
   };
-
+  
   return (
     <div 
       className={cn(
-        "flex my-2 w-full justify-center", 
+        "flex my-2 w-full justify-center overflow-hidden", 
         alignmentClasses[alignment],
         className
       )}
@@ -76,9 +77,14 @@ export function Emoji({ fieldName, className }: EmojiProps) {
     >
       <div 
         className={cn(
-          "emoji-display cursor-pointer", 
+          "emoji-display cursor-pointer overflow-hidden", 
           sizeClasses[size],
         )}
+        style={{
+          lineHeight: 1.2, // Ensure consistent vertical spacing
+          maxWidth: "100%", // Prevent horizontal overflow
+          textAlign: "center", // Center emoji
+        }}
       >
         {emoji}
       </div>

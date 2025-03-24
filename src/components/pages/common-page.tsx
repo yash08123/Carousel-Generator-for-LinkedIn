@@ -59,6 +59,10 @@ export function CommonPage({
                         slide.slideStyle === IntroSlideStyle.Emoji ||
                         slide.slideStyle === IntroSlideStyle.Headshot;
                         
+  // Check if this is a headshot slide
+  const isHeadshotSlide = slide.slideStyle === IntroSlideStyle.Headshot || 
+                          slide.slideStyle === "OutroHeadshot";
+                        
   // Get content slide style
   const contentSlideStyle = slide.slideStyle as ContentSlideStyle | undefined;
 
@@ -76,8 +80,14 @@ export function CommonPage({
     [offsetHeights]
     // TODO ADD dependencies
   );
+  
+  // Calculate the available space for elements
+  const footerHeight = footerDimensions.height || 0;
+  const totalPadding = FRAME_PADDING * 2;
+  const maxAvailableHeight = size.height - totalPadding - footerHeight;
+  
   const remainingHeight = elementsHeight
-    ? size.height - FRAME_PADDING * 2 - (footerDimensions.height || 0) - elementsHeight
+    ? Math.max(0, maxAvailableHeight - elementsHeight)
     : 0;
 
   // Custom layout classes based on content slide style
@@ -85,11 +95,14 @@ export function CommonPage({
     if (contentSlideStyle === ContentSlideStyle.Text) {
       return "flex flex-col items-center justify-center text-center";
     } else if (contentSlideStyle === ContentSlideStyle.Image) {
-      return "flex flex-col items-center";
+      return "flex flex-col items-center justify-center h-full";
     } else if (contentSlideStyle === ContentSlideStyle.Screenshot) {
       return "flex flex-col gap-4";
+    } else if (isHeadshotSlide) {
+      return "flex flex-col items-center justify-between gap-4";
     } else {
-      return "gap-2"; // Default layout
+      // Default layout for Text+Image (make sure title and image have good spacing)
+      return "flex flex-col items-center justify-between gap-6 h-full"; 
     }
   };
 
@@ -100,7 +113,17 @@ export function CommonPage({
       return false;
     }
     
-    return remainingHeight && remainingHeight >= 50;
+    // Don't show add element if there's not enough space
+    if (remainingHeight < 50) {
+      return false;
+    }
+    
+    // Limit the number of elements on headshot slides to prevent overflow
+    if (isHeadshotSlide && slide.elements.length >= 4) {
+      return false;
+    }
+    
+    return true;
   };
   
   // Apply specific styles to elements based on slide type
@@ -112,11 +135,55 @@ export function CommonPage({
     
     if (contentSlideStyle === ContentSlideStyle.Image && 
         element.type === ElementType.enum.ContentImage) {
-      return "max-h-[70%] flex-1";
+      return "max-h-[90%] flex-1 w-full";
+    }
+    
+    // For Text+Image slides (which is the default), make title more prominent and image larger
+    if (!contentSlideStyle && element.type === ElementType.enum.Title) {
+      return "text-center w-full mb-4 max-w-[90%]";
+    }
+    
+    if (!contentSlideStyle && element.type === ElementType.enum.ContentImage) {
+      return "max-h-[70%] w-full flex-1";
+    }
+    
+    if (isHeadshotSlide && element.type === ElementType.enum.Avatar) {
+      return "max-w-[70%] max-h-[50%] overflow-hidden"; 
+    }
+    
+    if (element.type === ElementType.enum.Emoji) {
+      return "max-w-full overflow-hidden";
     }
     
     return "";
   };
+
+  // Filter out elements based on slide style to prevent overcrowding
+  const filteredElements = React.useMemo(() => {
+    // For Image slides, only keep images (remove titles, descriptions, etc.)
+    if (contentSlideStyle === ContentSlideStyle.Image) {
+      return slide.elements.filter(element => 
+        element.type === ElementType.enum.ContentImage
+      );
+    }
+    
+    // For Text+Image slides (default), remove descriptions
+    if (!contentSlideStyle || contentSlideStyle === undefined) {
+      return slide.elements.filter(element => 
+        element.type !== ElementType.enum.Description
+      );
+    }
+    
+    // For Screenshot slides, remove descriptions
+    if (contentSlideStyle === ContentSlideStyle.Screenshot) {
+      return slide.elements.filter(element => 
+        element.type !== ElementType.enum.Description
+      );
+    }
+    
+    // For all other slide types, keep all elements
+    return slide.elements;
+  }, [slide.elements, contentSlideStyle]);
 
   return (
     <PageBase size={size} fieldName={backgroundImageField}>
@@ -136,11 +203,14 @@ export function CommonPage({
         fieldName={backgroundImageField}
         className={cn("p-10", className)}
       >
-        <PageLayout fieldName={backgroundImageField} className={getLayoutClasses()}>
-          {slide.elements.map((element, index) => {
+        <PageLayout fieldName={backgroundImageField} className={cn(getLayoutClasses(), "max-h-[calc(100%-2rem)] overflow-hidden")}>
+          {filteredElements.map((element, index) => {
+            // Use the actual index from the original slide.elements array to maintain correct field paths
+            const originalIndex = slide.elements.findIndex(e => e === element);
             const currentField = (fieldName +
               ".elements." +
-              index) as ElementFieldPath;
+              originalIndex) as ElementFieldPath;
+            
             return element.type == ElementType.enum.Title ? (
               <ElementMenubarWrapper
                 key={currentField}
@@ -185,7 +255,13 @@ export function CommonPage({
               >
                 <ContentImage
                   fieldName={currentField as ElementFieldPath}
-                  className={contentSlideStyle === ContentSlideStyle.Image ? "h-80" : "h-40"}
+                  className={
+                    contentSlideStyle === ContentSlideStyle.Image 
+                      ? "h-[85%]" 
+                      : contentSlideStyle === ContentSlideStyle.Screenshot
+                        ? "h-[60%]"
+                        : "h-[65%]"
+                  }
                 />
               </ElementMenubarWrapper>
             ) : element.type == ElementType.enum.Emoji ? (

@@ -161,18 +161,21 @@ export function useComponentPrinter() {
         return;
       }
 
-      const SCALE_TO_LINKEDIN_INTRINSIC_SIZE = 1.8;
+      // Increase scale factor to ensure better quality and fix element positioning
+      const SCALE_TO_LINKEDIN_INTRINSIC_SIZE = 2.5;
       // const fontEmbedCss = await getFontEmbedCSS(html);
       const options: HtmlToPdfOptions = {
         margin: [0, 0, 0, 0],
         filename: watch("filename"),
-        image: { type: "webp", quality: 0.98 },
+        image: { type: "webp", quality: 1.0 },
         htmlToImage: {
           height: SIZE.height * numPages,
           width: SIZE.width,
           canvasHeight:
             SIZE.height * numPages * SCALE_TO_LINKEDIN_INTRINSIC_SIZE,
           canvasWidth: SIZE.width * SCALE_TO_LINKEDIN_INTRINSIC_SIZE,
+          // Preserve accurate element positioning and font rendering
+          pixelRatio: SCALE_TO_LINKEDIN_INTRINSIC_SIZE,
         },
         jsPDF: { unit: "px", format: [SIZE.width, SIZE.height] },
       };
