@@ -13,7 +13,7 @@ import { BringYourKeysDialog } from "@/components/api-keys-dialog";
 import { useFormContext } from "react-hook-form";
 import { DocumentFormReturn } from "@/lib/document-form-types";
 import { useToast } from "./ui/use-toast";
-import { ElementType } from "@/lib/validation/elements-schema";
+import { ElementType } from "@/lib/validation/element-type";
 import { pallettes } from "@/lib/pallettes";
 import { fontsMap } from "@/lib/fonts-map";
 import { ThemeToggle } from "./theme-toggle";
@@ -29,6 +29,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+// Import enum from elements-schema.tsx for background elements
+import { ElementType as BackgroundElementType } from "@/lib/validation/elements-schema";
+import { TextALignType, VerticalAlignType, FontSizeType } from "@/lib/validation/text-schema";
 
 export type NavItem = {
   title: string;
@@ -46,7 +49,7 @@ interface MainNavProps {
 
 export function MainNav({ handlePrint, isPrinting, className }: MainNavProps) {
   const form: DocumentFormReturn = useFormContext();
-  const { setValue, reset } = form;
+  const { setValue, reset, getValues } = form;
   const { toast } = useToast();
   const [undoStack, setUndoStack] = React.useState<any[]>([]);
   const [redoStack, setRedoStack] = React.useState<any[]>([]);
@@ -136,11 +139,11 @@ export function MainNav({ handlePrint, isPrinting, className }: MainNavProps) {
     
     // 2. Randomly select and enable a background element
     const elementTypes = [
-      ElementType.Gradient,
-      ElementType.Grid,
-      ElementType.Dots,
-      ElementType.Waves,
-      ElementType.Geometric
+      BackgroundElementType.Gradient,
+      BackgroundElementType.Grid,
+      BackgroundElementType.Dots,
+      BackgroundElementType.Waves,
+      BackgroundElementType.Geometric
     ];
     const randomElementType = elementTypes[Math.floor(Math.random() * elementTypes.length)];
     
@@ -148,14 +151,14 @@ export function MainNav({ handlePrint, isPrinting, className }: MainNavProps) {
     setValue("config.elements.type", randomElementType);
     
     // Initialize properties based on the element type
-    if (randomElementType === ElementType.Gradient) {
+    if (randomElementType === BackgroundElementType.Gradient) {
       const directions = ["to-r", "to-l", "to-t", "to-b", "to-tr", "to-tl", "to-br", "to-bl"] as const;
       const randomDirection = directions[Math.floor(Math.random() * directions.length)];
       setValue("config.elements.gradient", {
         direction: randomDirection,
         opacity: Math.floor(Math.random() * 30) + 40, // Random opacity between 40-70%
       });
-    } else if (randomElementType === ElementType.Grid) {
+    } else if (randomElementType === BackgroundElementType.Grid) {
       const sizes = ["sm", "md", "lg"] as const;
       const randomSize = sizes[Math.floor(Math.random() * sizes.length)];
       setValue("config.elements.grid", {
@@ -163,7 +166,7 @@ export function MainNav({ handlePrint, isPrinting, className }: MainNavProps) {
         opacity: Math.floor(Math.random() * 30) + 40,
         color: "currentColor",
       });
-    } else if (randomElementType === ElementType.Dots) {
+    } else if (randomElementType === BackgroundElementType.Dots) {
       const sizes = ["sm", "md", "lg"] as const;
       const spacings = ["tight", "normal", "loose"] as const;
       const randomSize = sizes[Math.floor(Math.random() * sizes.length)];
@@ -173,14 +176,14 @@ export function MainNav({ handlePrint, isPrinting, className }: MainNavProps) {
         opacity: Math.floor(Math.random() * 30) + 40,
         spacing: randomSpacing,
       });
-    } else if (randomElementType === ElementType.Waves) {
+    } else if (randomElementType === BackgroundElementType.Waves) {
       const amplitudes = ["low", "medium", "high"] as const;
       const randomAmplitude = amplitudes[Math.floor(Math.random() * amplitudes.length)];
       setValue("config.elements.waves", {
         amplitude: randomAmplitude,
         opacity: Math.floor(Math.random() * 30) + 40,
       });
-    } else if (randomElementType === ElementType.Geometric) {
+    } else if (randomElementType === BackgroundElementType.Geometric) {
       const patterns = ["triangles", "squares", "hexagons"] as const;
       const sizes = ["sm", "md", "lg"] as const;
       const randomPattern = patterns[Math.floor(Math.random() * patterns.length)];
@@ -205,13 +208,284 @@ export function MainNav({ handlePrint, isPrinting, className }: MainNavProps) {
     setValue("config.fonts.font1", randomFont1Key);
     setValue("config.fonts.font2", randomFont2Key);
     
+    // 4. Enhanced randomize text elements with improved visibility checks
+    // Get current slides
+    const slides = getValues("slides");
+    if (slides && slides.length > 0) {
+      slides.forEach((slide, slideIndex) => {
+        // Count elements to determine best layout strategy
+        let elementCount = 0;
+        let hasTitle = false;
+        let hasSubtitle = false;
+        let hasDescription = false;
+        let hasImage = false;
+        let hasEmoji = false;
+        let hasAvatar = false;
+        let hasFooter = true; // Always consider footer as present
+        let hasSwipeIndicator = false;
+        let imageCount = 0;
+        
+        // Analyze slide content
+        if (slide.elements && slide.elements.length > 0) {
+          elementCount = slide.elements.length;
+          
+          // Check what elements exist on this slide
+          slide.elements.forEach(element => {
+            if (element.type === ElementType.enum.Title) hasTitle = true;
+            if (element.type === ElementType.enum.Subtitle) hasSubtitle = true;
+            if (element.type === ElementType.enum.Description) hasDescription = true;
+            if (element.type === ElementType.enum.ContentImage) {
+              hasImage = true;
+              imageCount++;
+            }
+            if (element.type === ElementType.enum.Emoji) hasEmoji = true;
+            if (element.type === ElementType.enum.Avatar) {
+              hasAvatar = true;
+              imageCount++;
+            }
+          });
+          
+          // Check if this is potentially an intro slide (likely to have swipe indicator)
+          hasSwipeIndicator = slideIndex === 0 || slideIndex === 1;
+        }
+        
+        // For very crowded slides (5+ elements), set a more structured layout
+        if (elementCount >= 5) {
+          // Force top-to-bottom layout with left alignment for consistency
+          let preferredHorizontalAlign = TextALignType.enum.Left;
+          
+          // Space elements evenly from top to bottom
+          let position = 0;
+          const totalElements = slide.elements.length;
+          
+          // Assign positions systematically to ensure visibility
+          slide.elements.forEach((element, elementIndex) => {
+            // Calculate relative position (0 = top, 1 = bottom)
+            const relativePosition = position / (totalElements - 1);
+            position++;
+            
+            // Apply position based on element type and relative position
+            if (element.type === ElementType.enum.Title) {
+              // Titles always at the top
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.verticalAlign`, "Top" as any);
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.align`, preferredHorizontalAlign);
+              // Use medium font size for dense slides
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.fontSize`, FontSizeType.enum.Medium);
+            }
+            else if (element.type === ElementType.enum.Subtitle) {
+              // Subtitles near the top, just after title
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.verticalAlign`, "Top" as any);
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.align`, preferredHorizontalAlign);
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.fontSize`, FontSizeType.enum.Medium);
+            }
+            else if (element.type === ElementType.enum.Description) {
+              // Descriptions in the middle
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.verticalAlign`, "Middle" as any);
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.align`, preferredHorizontalAlign);
+              // Use smaller font for descriptions in crowded slides
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.fontSize`, FontSizeType.enum.Small);
+            }
+            else if (element.type === ElementType.enum.ContentImage || 
+                     element.type === ElementType.enum.Avatar) {
+              // Images in the middle-bottom area
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.verticalAlign`, 
+                relativePosition < 0.7 ? "Middle" as any : "Bottom" as any);
+              // Center images horizontally
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.align`, TextALignType.enum.Center);
+            }
+            else if (element.type === ElementType.enum.Emoji) {
+              // Emojis are more flexible, can go anywhere
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.verticalAlign`, 
+                relativePosition < 0.3 ? "Top" as any : 
+                relativePosition < 0.7 ? "Middle" as any : "Bottom" as any);
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.align`, TextALignType.enum.Center);
+            }
+          });
+          
+          // Skip the rest of the normal positioning logic for very crowded slides
+          return;
+        }
+        
+        // Determine layout complexity
+        const isComplexLayout = elementCount >= 3 || imageCount > 1;
+        const isCrowded = elementCount >= 4;
+        
+        // Preferred horizontal alignment based on element count and types
+        let preferredHorizontalAlign: TextALignType = TextALignType.enum.Center;
+        
+        // For complex layouts with many elements, bias toward left alignment for better readability
+        if (isComplexLayout) {
+          preferredHorizontalAlign = Math.random() < 0.7 ? TextALignType.enum.Left : TextALignType.enum.Center;
+        }
+        
+        // For intro or title-only slides, center alignment looks better
+        if (slideIndex === 0 || elementCount <= 2) {
+          preferredHorizontalAlign = TextALignType.enum.Center;
+        }
+        
+        // For slides with avatar or emoji, ensure we always center these elements
+        if (hasAvatar || hasEmoji) {
+          preferredHorizontalAlign = TextALignType.enum.Center;
+        }
+        
+        // Decide on vertical distribution strategy based on content
+        // For slides with many elements, distribute them more evenly
+        
+        // Apply specific layout strategies based on slide content
+        let titlePosition: VerticalAlignType = VerticalAlignType.enum.Top;
+        let subtitlePosition: VerticalAlignType = VerticalAlignType.enum.Top;
+        let descriptionPosition: VerticalAlignType = VerticalAlignType.enum.Middle;
+        let imagePosition: VerticalAlignType = VerticalAlignType.enum.Middle;
+        let emojiPosition: VerticalAlignType = VerticalAlignType.enum.Middle;
+        let avatarPosition: VerticalAlignType = VerticalAlignType.enum.Middle;
+        
+        // First/intro slide strategy
+        if (slideIndex === 0) {
+          // Intro slide - center title and subtitle vertically
+          titlePosition = VerticalAlignType.enum.Middle;
+          subtitlePosition = VerticalAlignType.enum.Middle;
+          imagePosition = VerticalAlignType.enum.Bottom; // Put image at bottom if present
+          emojiPosition = VerticalAlignType.enum.Top; // Put emoji at top if present
+          avatarPosition = VerticalAlignType.enum.Top; // Avatar at top for intro slides
+        } 
+        // Minimal content (1-2 elements) strategy - center everything
+        else if (elementCount <= 2) {
+          titlePosition = VerticalAlignType.enum.Middle;
+          subtitlePosition = VerticalAlignType.enum.Middle;
+          descriptionPosition = VerticalAlignType.enum.Middle;
+          imagePosition = VerticalAlignType.enum.Middle;
+          emojiPosition = VerticalAlignType.enum.Middle;
+          avatarPosition = VerticalAlignType.enum.Middle;
+        }
+        // Title + Image strategy
+        else if (hasTitle && hasImage && !hasDescription) {
+          titlePosition = VerticalAlignType.enum.Top;
+          subtitlePosition = VerticalAlignType.enum.Top;
+          imagePosition = VerticalAlignType.enum.Middle;
+        }
+        // Title + Description strategy
+        else if (hasTitle && hasDescription && !hasImage) {
+          titlePosition = VerticalAlignType.enum.Top;
+          subtitlePosition = VerticalAlignType.enum.Top;
+          descriptionPosition = VerticalAlignType.enum.Middle;
+        }
+        // Title + Subtitle + Description strategy
+        else if (hasTitle && hasSubtitle && hasDescription) {
+          titlePosition = VerticalAlignType.enum.Top;
+          subtitlePosition = VerticalAlignType.enum.Top;
+          descriptionPosition = VerticalAlignType.enum.Middle;
+        }
+        // Title + Subtitle + Image strategy
+        else if (hasTitle && hasSubtitle && hasImage) {
+          titlePosition = VerticalAlignType.enum.Top;
+          subtitlePosition = VerticalAlignType.enum.Top;
+          imagePosition = VerticalAlignType.enum.Middle;
+        }
+        // Complex layout with many elements - evenly distribute
+        else if (isCrowded) {
+          titlePosition = VerticalAlignType.enum.Top;
+          subtitlePosition = VerticalAlignType.enum.Top;
+          descriptionPosition = VerticalAlignType.enum.Middle;
+          imagePosition = VerticalAlignType.enum.Middle;
+          emojiPosition = VerticalAlignType.enum.Bottom;
+          avatarPosition = VerticalAlignType.enum.Top;
+        }
+        
+        // Always adjust avatar to better position for visibility
+        if (hasAvatar) {
+          // For headshot slides, position avatar prominently
+          avatarPosition = hasTitle ? VerticalAlignType.enum.Middle : VerticalAlignType.enum.Top;
+        }
+        
+        // Adjust for swipe indicator to avoid overlap
+        if (hasSwipeIndicator) {
+          // Never put descriptions at the bottom with swipe indicators
+          if (descriptionPosition === "Bottom" as any) {
+            descriptionPosition = "Middle" as any;
+          }
+          // Ensure images don't overlap with swipe indicator
+          if (imagePosition === "Bottom" as any) {
+            imagePosition = "Middle" as any;
+          }
+        }
+        
+        // Apply positions to elements
+        if (slide.elements) {
+          slide.elements.forEach((element, elementIndex) => {
+            const elementType = element.type;
+            
+            // Apply specific positioning based on element type
+            if (elementType === ElementType.enum.Title) {
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.verticalAlign`, titlePosition);
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.align`, preferredHorizontalAlign);
+              
+              // For crowded slides, ensure title is concise with consistent size
+              if (isCrowded) {
+                setValue(`slides.${slideIndex}.elements.${elementIndex}.style.fontSize`, FontSizeType.enum.Medium);
+              } else {
+                // Otherwise, occasionally use a larger size for emphasis (30% chance)
+                if (Math.random() < 0.3) {
+                  setValue(`slides.${slideIndex}.elements.${elementIndex}.style.fontSize`, FontSizeType.enum.Large);
+                } else {
+                  setValue(`slides.${slideIndex}.elements.${elementIndex}.style.fontSize`, FontSizeType.enum.Medium);
+                }
+              }
+            } 
+            else if (elementType === ElementType.enum.Subtitle) {
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.verticalAlign`, subtitlePosition);
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.align`, preferredHorizontalAlign);
+              
+              // Keep subtitles at a consistent size
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.fontSize`, FontSizeType.enum.Medium);
+            }
+            else if (elementType === ElementType.enum.Description) {
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.verticalAlign`, descriptionPosition);
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.align`, preferredHorizontalAlign);
+              
+              // Descriptions typically look better at a smaller size when there's lots of content
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.fontSize`, 
+                isCrowded ? FontSizeType.enum.Small : FontSizeType.enum.Medium);
+            }
+            else if (elementType === ElementType.enum.ContentImage) {
+              // Images have different layout considerations
+              // We can't directly set vertical-align on images, but we can adjust their containers
+              // via element wrapper classes if needed
+              
+              // Try to apply any specific image styling via any available properties
+              if (element.style) {
+                setValue(`slides.${slideIndex}.elements.${elementIndex}.style.verticalAlign`, imagePosition);
+              }
+            }
+            else if (elementType === ElementType.enum.Emoji) {
+              // Center emojis horizontally for better aesthetics
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.align`, TextALignType.enum.Center);
+              
+              // Position emoji based on layout strategy
+              if (element.style) {
+                setValue(`slides.${slideIndex}.elements.${elementIndex}.style.verticalAlign`, emojiPosition);
+              }
+            }
+            else if (elementType === ElementType.enum.Avatar) {
+              // Center avatars horizontally
+              setValue(`slides.${slideIndex}.elements.${elementIndex}.style.align`, TextALignType.enum.Center);
+              
+              // Position avatar based on layout strategy
+              if (element.style) {
+                setValue(`slides.${slideIndex}.elements.${elementIndex}.style.verticalAlign`, avatarPosition);
+              }
+            }
+          });
+        }
+      });
+    }
+    
     // Save the new state
     setCurrentState(form.getValues());
     
     // Show toast notification
     toast({
       title: "Design Randomized!",
-      description: "New palette, background element, and fonts applied.",
+      description: "New palette, fonts, and layout applied to your carousel.",
     });
   };
 
@@ -321,3 +595,4 @@ export function MainNav({ handlePrint, isPrinting, className }: MainNavProps) {
     </div>
   );
 }
+

@@ -8,9 +8,17 @@ export type FontSizeType = z.infer<typeof FontSizeType>;
 export const TextALignType = z.enum(["Left", "Center", "Right"]);
 export type TextALignType = z.infer<typeof TextALignType>;
 
+export const VerticalAlignType = z.enum(["Top", "Middle", "Bottom"]);
+export type VerticalAlignType = z.infer<typeof VerticalAlignType>;
+
 export const TextStyleSchema = z.object({
   fontSize: FontSizeType.default(FontSizeType.enum.Medium),
   align: TextALignType.default(TextALignType.enum.Left),
+  verticalAlign: VerticalAlignType.default(VerticalAlignType.enum.Top),
+  numericFontSize: z.number().optional().default(16),
+  width: z.number().optional().default(100), // Width as percentage (50-100%)
+  lineHeight: z.number().optional().default(1.5), // Line height multiplier (1.0-2.5)
+  wordSpacing: z.number().optional().default(0), // Word spacing in pixels (-2 to 10)
 });
 
 export const UnstyledTitleSchema = z.object({
@@ -30,7 +38,10 @@ export const UnstyledTitleSchema = z.object({
 export const TitleSchema = UnstyledTitleSchema.merge(
   z.object({
     type: z.literal(ElementType.enum.Title).default(ElementType.enum.Title),
-    style: TextStyleSchema.default({}),
+    style: TextStyleSchema.default({
+      align: TextALignType.enum.Center,
+      verticalAlign: VerticalAlignType.enum.Middle,
+    }),
     formatting: TextFormattingSchema.default(DEFAULT_TEXT_FORMATTING),
   })
 );
@@ -53,7 +64,9 @@ export const SubtitleSchema = UnstyledSubtitleSchema.merge(
     type: z
       .literal(ElementType.enum.Subtitle)
       .default(ElementType.enum.Subtitle),
-    style: TextStyleSchema.default({}),
+    style: TextStyleSchema.default({
+      align: TextALignType.enum.Center,
+    }),
     formatting: TextFormattingSchema.default(DEFAULT_TEXT_FORMATTING),
   })
 );
@@ -62,8 +75,7 @@ export const UnstyledDescriptionSchema = z.object({
   type: z
     .literal(ElementType.enum.Description)
     .describe(`Indicates that this is a '${ElementType.enum.Description}'.`),
-  text: z
-    .string()
+  text: z.string()
     // .max(240)
     .describe("A short description of less than 240 chars")
     .default(""),

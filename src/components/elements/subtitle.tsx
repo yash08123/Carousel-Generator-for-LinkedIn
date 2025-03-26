@@ -43,6 +43,9 @@ export function Subtitle({
       )}
       style={{
         color: config.theme.secondary,
+        ...(style.numericFontSize ? { fontSize: `${style.numericFontSize}px` } : {}),
+        ...(style.lineHeight ? { lineHeight: style.lineHeight } : {}),
+        ...(style.wordSpacing !== undefined ? { wordSpacing: `${style.wordSpacing}px` } : {})
       }}
     />
   );

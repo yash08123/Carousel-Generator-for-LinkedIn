@@ -130,7 +130,7 @@ const ElementMenubarWrapper = React.forwardRef<
 ) {
   const { currentSelection } = useSelectionContext();
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative w-full" ref={ref}>
       <div
         id={`element-menubar-${fieldName}`}
         className={cn(
@@ -144,7 +144,9 @@ const ElementMenubarWrapper = React.forwardRef<
           className={className}
         />
       </div>
-      {children}
+      <div className="w-full">
+        {children}
+      </div>
     </div>
   );
 });

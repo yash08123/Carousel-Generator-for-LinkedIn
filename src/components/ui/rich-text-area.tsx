@@ -112,12 +112,15 @@ const RichTextArea = React.forwardRef<HTMLTextAreaElement, RichTextAreaProps>(
       return (
         <div 
           className={cn(
-            "absolute top-0 left-0 right-0 bottom-0 pointer-events-none whitespace-pre-wrap break-words",
+            "absolute top-0 left-0 right-0 bottom-0 pointer-events-none whitespace-pre-wrap break-words w-full min-w-full max-w-full",
             className
           )}
           style={{
             ...props.style,
             zIndex: 1,
+            width: '100%',
+            minWidth: '100%',
+            boxSizing: 'border-box'
           }}
         >
           {formattedContent}
@@ -131,7 +134,7 @@ const RichTextArea = React.forwardRef<HTMLTextAreaElement, RichTextAreaProps>(
         <TextareaAutosize
           ref={textareaRef}
           className={cn(
-            "w-full rounded-md outline outline-transparent hover:outline-input outline-2 bg-transparent text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 overflow-hidden resize-none p-0 z-0 relative",
+            "w-full min-w-full max-w-full rounded-md outline outline-transparent hover:outline-input outline-2 bg-transparent text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 overflow-hidden resize-none p-0 z-0 relative",
             className
           )}
           {...props}
@@ -144,6 +147,9 @@ const RichTextArea = React.forwardRef<HTMLTextAreaElement, RichTextAreaProps>(
             caretColor: props.style?.color || 'inherit',
             background: 'transparent',
             zIndex: 2,
+            width: '100%',
+            minWidth: '100%',
+            boxSizing: 'border-box'
           } as any}
         />
         

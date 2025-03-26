@@ -24,11 +24,22 @@ import {
   Square,
   Circle,
   Trash2,
+  ImageIcon,
+  Text,
+  Command,
+  ScrollText,
+  ChevronRight,
+  Image,
+  FileText,
+  LayoutTemplate,
+  Monitor,
+  UserCircle,
+  SmilePlus,
 } from "lucide-react";
 import { FontSizeType, TextALignType } from "@/lib/validation/text-schema";
 import { OpacityFormField } from "@/components/forms/fields/opacity-form-field";
 import { ImageSourceFormField } from "@/components/forms/fields/image-source-form-field";
-import { ObjectFitType } from "@/lib/validation/image-schema";
+import { ObjectFitType, ImageInputType } from "@/lib/validation/image-schema";
 import { ElementType } from "@/lib/validation/element-type";
 import {
   TypographyFieldName,
@@ -38,7 +49,7 @@ import {
 } from "@/components/typography";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "./ui/input";
-import { FormControl, FormField, FormItem, FormLabel } from "./ui/form";
+import { FormControl, FormField, FormItem, FormLabel, FormDescription } from "./ui/form";
 import { EmojiPicker } from "./emoji-picker";
 import { Button } from "./ui/button";
 import { useFieldArray } from "react-hook-form";
@@ -57,6 +68,12 @@ import { useFormContext } from "react-hook-form";
 import { IntroSlideStyle } from "./intro-slide-style-dialog";
 import { useTextSelectionContext } from "@/lib/providers/text-selection-context";
 import { TextFormattingForm } from "./forms/text-formatting-form";
+import { Switch } from "@/components/ui/switch";
+import { ContentSlideStyle } from "./content-slide-style-dialog";
+import { OutroSlideStyle } from "./outro-slide-style-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { DEFAULT_TITLE, DEFAULT_SUBTITLE, DEFAULT_DESCRIPTION } from "@/lib/validation/text-schema";
+import { DEFAULT_CONTENT_IMAGE_INPUT } from "@/lib/validation/image-schema";
 
 const fontSizeMap: Record<FontSizeType, React.ReactElement> = {
   [FontSizeType.enum.Small]: <Type className="h-2 w-2" />,
@@ -86,6 +103,13 @@ const isElementSelection = (selection: string): boolean => {
   // Element paths have format like "slides.0.elements.1"
   // Slide paths have format like "slides.0"
   return selection.includes('.elements.');
+};
+
+// Function to check if the selection is a text element
+const isTextElement = (type: string | undefined): boolean => {
+  return type === ElementType.enum.Title || 
+         type === ElementType.enum.Subtitle || 
+         type === ElementType.enum.Description;
 };
 
 // Function to check if the selection is a swipe indicator
@@ -124,6 +148,51 @@ const isSwipeIndicatorSelection = (selection: string, form: DocumentFormReturn):
   }
 };
 
+// Function to check if the selection is a slide (not an element)
+const isSlideSelection = (selection: string | null | undefined): boolean => {
+  // Element paths have format like "slides.0.elements.1"
+  // Slide paths have format like "slides.0"
+  return !!selection && selection.startsWith('slides.') && !selection.includes('.elements.');
+};
+
+// Function to check if the selection is a content slide
+const isContentSlide = (slideStyle?: string): boolean => {
+  return slideStyle === ContentSlideStyle.Text || 
+         slideStyle === ContentSlideStyle.TextImage || 
+         slideStyle === ContentSlideStyle.Image || 
+         slideStyle === ContentSlideStyle.Screenshot;
+};
+
+// Function to check if the selection is an intro slide
+const isIntroSlideType = (slideStyle?: string): boolean => {
+  return slideStyle === IntroSlideStyle.Classic || 
+         slideStyle === IntroSlideStyle.Emoji || 
+         slideStyle === IntroSlideStyle.Headshot;
+};
+
+// Function to check if the selection is an outro slide
+const isOutroSlideType = (slideStyle?: string): boolean => {
+  return slideStyle === OutroSlideStyle.Classic || 
+         slideStyle === OutroSlideStyle.Headshot;
+};
+
+// Function to determine slide category based on style
+const getSlideCategory = (slideStyle?: string): 'intro' | 'content' | 'outro' | 'unknown' => {
+  if (isIntroSlideType(slideStyle)) return 'intro';
+  if (isContentSlide(slideStyle)) return 'content';
+  if (isOutroSlideType(slideStyle)) return 'outro';
+  return 'unknown';
+};
+
+// Helper function to get the field path for a content image in a slide
+const getContentImageFieldPath = (slideIndex: number, slideElements: any[]): string => {
+  const imageIndex = slideElements.findIndex(el => el.type === ElementType.enum.ContentImage);
+  if (imageIndex >= 0) {
+    return `slides.${slideIndex}.elements.${imageIndex}.source`;
+  }
+  return `slides.${slideIndex}.backgroundImage.source`;
+};
+
 export function StyleMenu({
   form,
   className = "",
@@ -135,6 +204,8 @@ export function StyleMenu({
   const { currentTextSelection } = useTextSelectionContext();
   const stylePath = elementPath ? elementPath + ".style" : "";
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [aiPrompt, setAiPrompt] = React.useState("");
   
   // Get all form-related values and hooks upfront
   const { control } = form;
@@ -143,7 +214,9 @@ export function StyleMenu({
   let type;
   let elementsPath = "";
   let elementIndex = -1;
-  let showDeleteButton = false;
+  
+  // Default to showing delete button for any element path with '.elements.'
+  let showDeleteButton = elementPath?.includes('.elements.') || false;
   
   if (elementPath) {
     try {
@@ -151,11 +224,13 @@ export function StyleMenu({
       style = values?.style;
       type = values?.type;
       
-      elementsPath = getParent(elementPath as string);
-      elementIndex = getElementNumber(elementPath as string);
-      showDeleteButton = isElementSelection(elementPath || "");
+      // For element paths, extract the parent path and index
+      if (elementPath.includes('.elements.')) {
+        elementsPath = getParent(elementPath as string);
+        elementIndex = getElementNumber(elementPath as string);
+      }
     } catch (error) {
-      // Handle any errors silently
+      console.error("Error in StyleMenu:", error);
     }
   }
   
@@ -166,12 +241,14 @@ export function StyleMenu({
   });
   
   const handleDeleteElement = () => {
-    remove(elementIndex);
-    setCurrentSelection("", null);
-    setDeleteDialogOpen(false);
+    if (elementPath && elementPath.includes('.elements.') && elementIndex >= 0) {
+      remove(elementIndex);
+      setCurrentSelection("", null);
+      setDeleteDialogOpen(false);
+    }
   };
   
-  if (!stylePath) {
+  if (!stylePath && !isSlideSelection(elementPath || "")) {
     return <></>;
   }
   
@@ -195,6 +272,695 @@ export function StyleMenu({
         onClick={(event) => event.stopPropagation()}
       >
         <TextFormattingForm />
+      </div>
+    );
+  }
+  
+  // If we have a slide selected but not an element, show the elements toggle menu
+  if (isSlideSelection(elementPath || "")) {
+    // Get the slide index
+    const slideIndex = parseInt(elementPath!.split('.')[1]);
+    // Get the slide elements
+    const slideElements = form.getValues(`slides.${slideIndex}.elements`) || [];
+    
+    // Extract the slide style to determine what elements should be available
+    const slideStyle = form.getValues(`slides.${slideIndex}.slideStyle`);
+    const slideCategory = getSlideCategory(slideStyle);
+    
+    return (
+      <div
+        className={cn("grid gap-4", className)}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {/* Slide Type Section - shown for all slide types */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <TypographyH3>Slide Type</TypographyH3>
+            <div className="text-xs text-muted-foreground">
+              Slide #{slideIndex + 1}
+            </div>
+          </div>
+          
+          {/* Intro Slide Types */}
+          {slideCategory === 'intro' && (
+            <div className="w-full mb-6">
+              <TabsList className="grid grid-cols-3 w-full mb-5 bg-background/20 border border-border/30 shadow-md rounded-lg p-1.5 gap-1.5" defaultValue={slideStyle}>
+                <TabsTrigger 
+                  value={IntroSlideStyle.Classic}
+                  title="Classic"
+                  onClick={() => {
+                    // First, filter out slide-specific elements (emoji and avatar)
+                    const filteredElements = slideElements.filter(el => 
+                      el.type !== ElementType.enum.Emoji && el.type !== ElementType.enum.Avatar
+                    );
+                    
+                    // Update slide style and elements
+                    form.setValue(`slides.${slideIndex}.elements`, filteredElements);
+                    form.setValue(`slides.${slideIndex}.slideStyle`, IntroSlideStyle.Classic);
+                    form.setValue(`slides.${slideIndex}.showTitle`, true);
+                    form.setValue(`slides.${slideIndex}.showTagline`, true);
+                    form.setValue(`slides.${slideIndex}.showParagraph`, true);
+                    form.setValue(`slides.${slideIndex}.showSwipeIndicator`, true);
+                  }}
+                  className={cn(
+                    "flex items-center justify-center p-2.5 aspect-square transition-all duration-200 rounded-md border border-transparent data-[state=active]:border-primary/50 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow hover:bg-muted/70",
+                    slideStyle === IntroSlideStyle.Classic ? "bg-primary text-primary-foreground shadow" : "bg-card/80"
+                  )}
+                >
+                  <FileText className="h-5 w-5" />
+                </TabsTrigger>
+                <TabsTrigger 
+                  value={IntroSlideStyle.Emoji}
+                  title="Emoji"
+                  onClick={() => {
+                    // First, filter out slide-specific elements (avatar)
+                    const filteredElements = slideElements.filter(el => 
+                      el.type !== ElementType.enum.Avatar
+                    );
+                    
+                    // Update slide style and appropriate toggles for Emoji Intro
+                    form.setValue(`slides.${slideIndex}.elements`, filteredElements);
+                    form.setValue(`slides.${slideIndex}.slideStyle`, IntroSlideStyle.Emoji);
+                    form.setValue(`slides.${slideIndex}.showTitle`, true);
+                    form.setValue(`slides.${slideIndex}.showTagline`, true);
+                    form.setValue(`slides.${slideIndex}.showParagraph`, true);
+                    form.setValue(`slides.${slideIndex}.showSwipeIndicator`, true);
+                    
+                    // Add an emoji element if not already present
+                    const hasEmoji = filteredElements.some(el => el.type === ElementType.enum.Emoji);
+                    if (!hasEmoji) {
+                      const newElements = [...filteredElements];
+                      // Add the emoji at the beginning
+                      newElements.unshift({
+                        type: ElementType.enum.Emoji,
+                        emoji: "😊",
+                        style: {
+                          size: "Large",
+                          alignment: "Center",
+                        }
+                      });
+                      form.setValue(`slides.${slideIndex}.elements`, newElements);
+                    }
+                  }}
+                  className={cn(
+                    "flex items-center justify-center p-2.5 aspect-square transition-all duration-200 rounded-md border border-transparent data-[state=active]:border-primary/50 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow hover:bg-muted/70",
+                    slideStyle === IntroSlideStyle.Emoji ? "bg-primary text-primary-foreground shadow" : "bg-card/80"
+                  )}
+                >
+                  <SmilePlus className="h-5 w-5" />
+                </TabsTrigger>
+                <TabsTrigger 
+                  value={IntroSlideStyle.Headshot}
+                  title="Headshot"
+                  onClick={() => {
+                    // First, filter out slide-specific elements (emoji)
+                    const filteredElements = slideElements.filter(el => 
+                      el.type !== ElementType.enum.Emoji
+                    );
+                    
+                    // Update slide style and appropriate toggles for Headshot Intro
+                    form.setValue(`slides.${slideIndex}.elements`, filteredElements);
+                    form.setValue(`slides.${slideIndex}.slideStyle`, IntroSlideStyle.Headshot);
+                    form.setValue(`slides.${slideIndex}.showTitle`, true);
+                    form.setValue(`slides.${slideIndex}.showTagline`, true);
+                    form.setValue(`slides.${slideIndex}.showParagraph`, true);
+                    form.setValue(`slides.${slideIndex}.showSwipeIndicator`, true);
+                    
+                    // Add an avatar element if not already present
+                    const hasAvatar = filteredElements.some(el => el.type === ElementType.enum.Avatar);
+                    if (!hasAvatar) {
+                      const newElements = [...filteredElements];
+                      // Add the avatar at the beginning
+                      newElements.unshift({
+                        type: ElementType.enum.Avatar,
+                        style: {
+                          size: "Large",
+                          alignment: "Center",
+                          shape: "Circle"
+                        }
+                      });
+                      form.setValue(`slides.${slideIndex}.elements`, newElements);
+                      
+                      // Make sure the brand avatar is set up in the config
+                      const brandAvatar = form.getValues("config.brand.avatar");
+                      if (!brandAvatar || !brandAvatar.source || !brandAvatar.source.src) {
+                        form.setValue("config.brand.avatar.source", {
+                          src: "https://placekitten.com/200/200",
+                          type: ImageInputType.Url
+                        });
+                      }
+                    }
+                  }}
+                  className={cn(
+                    "flex items-center justify-center p-2.5 aspect-square transition-all duration-200 rounded-md border border-transparent data-[state=active]:border-primary/50 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow hover:bg-muted/70",
+                    slideStyle === IntroSlideStyle.Headshot ? "bg-primary text-primary-foreground shadow" : "bg-card/80"
+                  )}
+                >
+                  <UserCircle className="h-5 w-5" />
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          )}
+          
+          {/* Content Slide Types */}
+          {slideCategory === 'content' && (
+            <div className="w-full mb-6">
+              <TabsList className="grid grid-cols-4 w-full mb-5 bg-background/20 border border-border/30 shadow-md rounded-lg p-1.5 gap-1.5" defaultValue={slideStyle}>
+                <TabsTrigger 
+                  value={ContentSlideStyle.Text}
+                  title="Text"
+                  onClick={() => {
+                    // Update slide style and appropriate toggles for Text layout
+                    form.setValue(`slides.${slideIndex}.slideStyle`, ContentSlideStyle.Text);
+                    form.setValue(`slides.${slideIndex}.showTitle`, true);
+                    form.setValue(`slides.${slideIndex}.showTagline`, true);
+                    form.setValue(`slides.${slideIndex}.showParagraph`, true);
+                    
+                    // Ensure we have text elements but remove image elements
+                    const filteredElements = slideElements.filter(el => 
+                      el.type !== ElementType.enum.ContentImage && el.type !== ElementType.enum.Image
+                    );
+                    
+                    // Add default text elements if needed
+                    const hasTitle = filteredElements.some(el => el.type === ElementType.enum.Title);
+                    const hasSubtitle = filteredElements.some(el => el.type === ElementType.enum.Subtitle);
+                    const hasDescription = filteredElements.some(el => el.type === ElementType.enum.Description);
+                    
+                    let newElements = [...filteredElements];
+                    
+                    if (!hasTitle) {
+                      newElements.push({ ...DEFAULT_TITLE });
+                    }
+                    
+                    if (!hasSubtitle) {
+                      newElements.push({ ...DEFAULT_SUBTITLE });
+                    }
+                    
+                    if (!hasDescription) {
+                      newElements.push({ ...DEFAULT_DESCRIPTION });
+                    }
+                    
+                    form.setValue(`slides.${slideIndex}.elements`, newElements);
+                  }}
+                  className={cn(
+                    "flex items-center justify-center p-2.5 aspect-square transition-all duration-200 rounded-md border border-transparent data-[state=active]:border-primary/50 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow hover:bg-muted/70",
+                    slideStyle === ContentSlideStyle.Text ? "bg-primary text-primary-foreground shadow" : "bg-card/80"
+                  )}
+                >
+                  <FileText className="h-5 w-5" />
+                </TabsTrigger>
+                <TabsTrigger 
+                  value={ContentSlideStyle.TextImage}
+                  title="Text+Image"
+                  onClick={() => {
+                    // Update slide style and appropriate toggles for Text+Image layout
+                    form.setValue(`slides.${slideIndex}.slideStyle`, ContentSlideStyle.TextImage);
+                    form.setValue(`slides.${slideIndex}.showTitle`, true);
+                    form.setValue(`slides.${slideIndex}.showTagline`, true);
+                    form.setValue(`slides.${slideIndex}.showParagraph`, false);
+                    
+                    // Filter elements but keep existing text elements
+                    let newElements = slideElements.filter(el => 
+                      el.type !== ElementType.enum.ContentImage && el.type !== ElementType.enum.Image
+                    );
+                    
+                    // Add default text elements if needed
+                    const hasTitle = newElements.some(el => el.type === ElementType.enum.Title);
+                    const hasSubtitle = newElements.some(el => el.type === ElementType.enum.Subtitle);
+                    
+                    if (!hasTitle) {
+                      newElements.push({ ...DEFAULT_TITLE });
+                    }
+                    
+                    if (!hasSubtitle) {
+                      newElements.push({ ...DEFAULT_SUBTITLE });
+                    }
+                    
+                    // Add a ContentImage element
+                    // @ts-ignore - Intentionally adding ContentImage element
+                    newElements.push({ ...DEFAULT_CONTENT_IMAGE_INPUT });
+                    
+                    // Filter out any undefined values to ensure type safety
+                    const filteredElements = newElements.filter(el => el !== undefined);
+                    
+                    form.setValue(`slides.${slideIndex}.elements`, filteredElements);
+                  }}
+                  className={cn(
+                    "flex items-center justify-center p-2.5 aspect-square transition-all duration-200 rounded-md border border-transparent data-[state=active]:border-primary/50 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow hover:bg-muted/70",
+                    slideStyle === ContentSlideStyle.TextImage ? "bg-primary text-primary-foreground shadow" : "bg-card/80"
+                  )}
+                >
+                  <LayoutTemplate className="h-5 w-5" />
+                </TabsTrigger>
+                <TabsTrigger 
+                  value={ContentSlideStyle.Image}
+                  title="Image"
+                  onClick={() => {
+                    // Update slide style and appropriate toggles for Image-only layout
+                    form.setValue(`slides.${slideIndex}.slideStyle`, ContentSlideStyle.Image);
+                    form.setValue(`slides.${slideIndex}.showTitle`, false);
+                    form.setValue(`slides.${slideIndex}.showTagline`, false);
+                    form.setValue(`slides.${slideIndex}.showParagraph`, false);
+                    
+                    // Remove all elements except images
+                    const hasContentImage = slideElements.some(el => el.type === ElementType.enum.ContentImage);
+                    
+                    if (hasContentImage) {
+                      // Keep only the content image
+                      const imageElements = slideElements.filter(el => el.type === ElementType.enum.ContentImage);
+                      form.setValue(`slides.${slideIndex}.elements`, imageElements);
+                    } else {
+                      // Add a new content image
+                      form.setValue(`slides.${slideIndex}.elements`, [{ ...DEFAULT_CONTENT_IMAGE_INPUT }]);
+                    }
+                  }}
+                  className={cn(
+                    "flex items-center justify-center p-2.5 aspect-square transition-all duration-200 rounded-md border border-transparent data-[state=active]:border-primary/50 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow hover:bg-muted/70",
+                    slideStyle === ContentSlideStyle.Image ? "bg-primary text-primary-foreground shadow" : "bg-card/80"
+                  )}
+                >
+                  <ImageIcon className="h-5 w-5" />
+                </TabsTrigger>
+                <TabsTrigger 
+                  value={ContentSlideStyle.Screenshot}
+                  title="Screenshot"
+                  onClick={() => {
+                    // Update slide style and appropriate toggles for Screenshot layout
+                    form.setValue(`slides.${slideIndex}.slideStyle`, ContentSlideStyle.Screenshot);
+                    form.setValue(`slides.${slideIndex}.showTitle`, true);
+                    form.setValue(`slides.${slideIndex}.showTagline`, false);
+                    form.setValue(`slides.${slideIndex}.showParagraph`, false);
+                    
+                    // Filter to keep only title and content image
+                    let newElements = [];
+                    
+                    // Keep existing title if present, otherwise add default
+                    const existingTitle = slideElements.find(el => el.type === ElementType.enum.Title);
+                    if (existingTitle) {
+                      newElements.push(existingTitle);
+                    } else {
+                      newElements.push({ ...DEFAULT_TITLE });
+                    }
+                    
+                    // Add content image if not already present
+                    const hasContentImage = slideElements.some(el => el.type === ElementType.enum.ContentImage);
+                    if (hasContentImage) {
+                      const imageElement = slideElements.find(el => el.type === ElementType.enum.ContentImage);
+                      if (imageElement) {
+                        newElements.push(imageElement);
+                      }
+                    } else {
+                      newElements.push({ ...DEFAULT_CONTENT_IMAGE_INPUT });
+                    }
+                    
+                    // Filter out any undefined values to ensure type safety
+                    const filteredElements = newElements.filter(el => el !== undefined);
+                    
+                    form.setValue(`slides.${slideIndex}.elements`, filteredElements);
+                  }}
+                  className={cn(
+                    "flex items-center justify-center p-2.5 aspect-square transition-all duration-200 rounded-md border border-transparent data-[state=active]:border-primary/50 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow hover:bg-muted/70",
+                    slideStyle === ContentSlideStyle.Screenshot ? "bg-primary text-primary-foreground shadow" : "bg-card/80"
+                  )}
+                >
+                  <Monitor className="h-5 w-5" />
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          )}
+          
+          {/* Outro Slide Types */}
+          {slideCategory === 'outro' && (
+            <div className="w-full mb-6">
+              <TabsList className="grid grid-cols-2 w-full mb-5 bg-background/20 border border-border/30 shadow-md rounded-lg p-1.5 gap-1.5" defaultValue={slideStyle}>
+                <TabsTrigger 
+                  value={OutroSlideStyle.Classic}
+                  title="Classic"
+                  onClick={() => {
+                    // Filter out slide-specific elements (avatar)
+                    const filteredElements = slideElements.filter(el => 
+                      el.type !== ElementType.enum.Avatar
+                    );
+                    
+                    // Update slide style and appropriate toggles for Classic Outro
+                    form.setValue(`slides.${slideIndex}.elements`, filteredElements);
+                    form.setValue(`slides.${slideIndex}.slideStyle`, OutroSlideStyle.Classic);
+                    form.setValue(`slides.${slideIndex}.showTitle`, true);
+                    form.setValue(`slides.${slideIndex}.showTagline`, true);
+                    form.setValue(`slides.${slideIndex}.showParagraph`, true);
+                    
+                    // Make sure we have the necessary text elements
+                    const hasTitle = filteredElements.some(el => el.type === ElementType.enum.Title);
+                    const hasSubtitle = filteredElements.some(el => el.type === ElementType.enum.Subtitle);
+                    const hasDescription = filteredElements.some(el => el.type === ElementType.enum.Description);
+                    
+                    let newElements = [...filteredElements];
+                    
+                    if (!hasTitle) {
+                      newElements.push({ ...DEFAULT_TITLE });
+                    }
+                    
+                    if (!hasSubtitle) {
+                      newElements.push({ ...DEFAULT_SUBTITLE });
+                    }
+                    
+                    if (!hasDescription) {
+                      newElements.push({ ...DEFAULT_DESCRIPTION });
+                    }
+                    
+                    form.setValue(`slides.${slideIndex}.elements`, newElements);
+                  }}
+                  className={cn(
+                    "flex items-center justify-center p-2.5 aspect-square transition-all duration-200 rounded-md border border-transparent data-[state=active]:border-primary/50 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow hover:bg-muted/70",
+                    slideStyle === OutroSlideStyle.Classic ? "bg-primary text-primary-foreground shadow" : "bg-card/80"
+                  )}
+                >
+                  <FileText className="h-5 w-5" />
+                </TabsTrigger>
+                <TabsTrigger 
+                  value={OutroSlideStyle.Headshot}
+                  title="Headshot"
+                  onClick={() => {
+                    // Filter out content-specific elements
+                    let filteredElements = slideElements.filter(el => 
+                      el.type !== ElementType.enum.Description
+                    );
+                    
+                    // Update slide style and appropriate toggles for Headshot Outro
+                    form.setValue(`slides.${slideIndex}.slideStyle`, OutroSlideStyle.Headshot);
+                    form.setValue(`slides.${slideIndex}.showTitle`, true);
+                    form.setValue(`slides.${slideIndex}.showTagline`, true);
+                    form.setValue(`slides.${slideIndex}.showParagraph`, false);
+                    
+                    // Make sure we have the necessary text elements
+                    const hasTitle = filteredElements.some(el => el.type === ElementType.enum.Title);
+                    const hasSubtitle = filteredElements.some(el => el.type === ElementType.enum.Subtitle);
+                    
+                    let newElements = [...filteredElements];
+                    
+                    if (!hasTitle) {
+                      newElements.push({ ...DEFAULT_TITLE });
+                    }
+                    
+                    if (!hasSubtitle) {
+                      newElements.push({ ...DEFAULT_SUBTITLE });
+                    }
+                    
+                    // Add an avatar element if not already present
+                    const hasAvatar = newElements.some(el => el.type === ElementType.enum.Avatar);
+                    if (!hasAvatar) {
+                      // Add the avatar at the beginning
+                      newElements.unshift({
+                        type: ElementType.enum.Avatar,
+                        style: {
+                          size: "Large", 
+                          alignment: "Center",
+                          shape: "Circle"
+                        }
+                      });
+                    }
+                    
+                    form.setValue(`slides.${slideIndex}.elements`, newElements);
+                    
+                    // Make sure the brand avatar is set up in the config
+                    const brandAvatar = form.getValues("config.brand.avatar");
+                    if (!brandAvatar || !brandAvatar.source || !brandAvatar.source.src) {
+                      form.setValue("config.brand.avatar.source", {
+                        src: "https://placekitten.com/200/200",
+                        type: ImageInputType.Url
+                      });
+                    }
+                  }}
+                  className={cn(
+                    "flex items-center justify-center p-2.5 aspect-square transition-all duration-200 rounded-md border border-transparent data-[state=active]:border-primary/50 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow hover:bg-muted/70",
+                    slideStyle === OutroSlideStyle.Headshot ? "bg-primary text-primary-foreground shadow" : "bg-card/80"
+                  )}
+                >
+                  <UserCircle className="h-5 w-5" />
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          )}
+          
+          {/* For unknown slide types, provide a message */}
+          {slideCategory === 'unknown' && (
+            <div className="text-sm text-muted-foreground">
+              This slide type does not have style variations.
+            </div>
+          )}
+          
+          <Separator className="my-2" />
+        </div>
+
+        {/* Image options for image-based slides - simplified */}
+        {(slideStyle === ContentSlideStyle.Image || 
+          slideStyle === ContentSlideStyle.Screenshot || 
+          slideStyle === ContentSlideStyle.TextImage) && (
+          <div className="space-y-4 pt-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-base font-medium">Image</h4>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="flex items-center justify-center gap-1 h-10"
+                onClick={() => {
+                  // Handle horizontal alignment
+                  if (slideElements.some(el => el.type === ElementType.enum.ContentImage)) {
+                    // Set content image to horizontal alignment
+                    const imageIndex = slideElements.findIndex(el => el.type === ElementType.enum.ContentImage);
+                    if (imageIndex >= 0) {
+                      form.setValue(`slides.${slideIndex}.elements.${imageIndex}.style.align`, TextALignType.enum.Center);
+                    }
+                  }
+                }}
+              >
+                <LayoutTemplate className="h-4 w-4" />
+                <span className="text-xs">Horizontal</span>
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="flex items-center justify-center gap-1 h-10"
+                onClick={() => {
+                  // Handle vertical alignment
+                  if (slideElements.some(el => el.type === ElementType.enum.ContentImage)) {
+                    // Set content image to vertical alignment
+                    const imageIndex = slideElements.findIndex(el => el.type === ElementType.enum.ContentImage);
+                    if (imageIndex >= 0) {
+                      form.setValue(`slides.${slideIndex}.elements.${imageIndex}.style.align`, TextALignType.enum.Center);
+                    }
+                  }
+                }}
+              >
+                <LayoutTemplate className="h-4 w-4 rotate-90" />
+                <span className="text-xs">Vertical</span>
+              </Button>
+            </div>
+            
+            {/* Active Image Source Display */}
+            {slideElements.some(el => el.type === ElementType.enum.ContentImage) && (
+              <div className="border rounded-md p-2 flex justify-center items-center bg-muted/30 h-32 overflow-hidden">
+                {(() => {
+                  const imageIndex = slideElements.findIndex(el => el.type === ElementType.enum.ContentImage);
+                  const imageSrc = imageIndex >= 0 
+                    ? form.getValues(`slides.${slideIndex}.elements.${imageIndex}.source.src`) 
+                    : '';
+                    
+                  return imageSrc 
+                    ? <img 
+                        src={imageSrc} 
+                        alt="Current slide image" 
+                        className="max-w-full max-h-full object-contain"
+                      /> 
+                    : <div className="text-sm text-muted-foreground flex flex-col items-center">
+                        <ImageIcon className="h-6 w-6 mb-2" />
+                        <span>No image selected</span>
+                      </div>;
+                })()}
+              </div>
+            )}
+            
+            {/* Simplified Image Source Section */}
+            <div className="border rounded-md p-3">
+              <h5 className="text-sm font-medium mb-3">Image Source</h5>
+              <ImageSourceFormField
+                fieldName={getContentImageFieldPath(slideIndex, slideElements) as ImageSourceFieldPath}
+                form={form}
+              />
+            </div>
+          </div>
+        )}
+        
+        {/* Slide Elements Section */}
+        <div className="space-y-2">
+          <TypographyH3>Slide Elements</TypographyH3>
+          <p className="text-sm text-muted-foreground">
+            Toggle elements to show on this slide
+          </p>
+        </div>
+        
+        <Separator className="my-2" />
+        
+        {/* Tagline Toggle */}
+        <div className="flex items-center space-x-2">
+          <FormField
+            control={form.control}
+            name={`slides.${slideIndex}.showTagline`}
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm w-full">
+                <div className="space-y-0.5">
+                  <div className="flex items-center">
+                    <Command className="mr-2 h-4 w-4 text-primary" />
+                    <FormLabel className="font-medium">Tagline</FormLabel>
+                  </div>
+                  <FormDescription className="text-xs">
+                    A short, attention-grabbing phrase
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </div>
+        
+        {/* Title Toggle */}
+        <div className="flex items-center space-x-2">
+          <FormField
+            control={form.control}
+            name={`slides.${slideIndex}.showTitle`}
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm w-full">
+                <div className="space-y-0.5">
+                  <div className="flex items-center">
+                    <Text className="mr-2 h-4 w-4 text-primary" />
+                    <FormLabel className="font-medium">Title</FormLabel>
+                  </div>
+                  <FormDescription className="text-xs">
+                    The main heading of your slide
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </div>
+        
+        {/* Paragraph Toggle */}
+        <div className="flex items-center space-x-2">
+          <FormField
+            control={form.control}
+            name={`slides.${slideIndex}.showParagraph`}
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm w-full">
+                <div className="space-y-0.5">
+                  <div className="flex items-center">
+                    <ScrollText className="mr-2 h-4 w-4 text-primary" />
+                    <FormLabel className="font-medium">Paragraph</FormLabel>
+                  </div>
+                  <FormDescription className="text-xs">
+                    Detailed text content for your slide
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </div>
+        
+        {/* Swipe Indicator Toggle - Only for intro slides */}
+        {slideCategory === 'intro' && (
+          <div className="flex items-center space-x-2">
+            <FormField
+              control={form.control}
+              name={`slides.${slideIndex}.showSwipeIndicator`}
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm w-full">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center">
+                      <ChevronRight className="mr-2 h-4 w-4 text-primary" />
+                      <FormLabel className="font-medium">Swipe Indicator</FormLabel>
+                    </div>
+                    <FormDescription className="text-xs">
+                      A visual cue to prompt swiping
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+          </div>
+        )}
+        
+        {/* Background Image Toggle */}
+        <div className="flex items-center space-x-2">
+          <FormField
+            control={form.control}
+            name={`slides.${slideIndex}.showBackgroundImage`}
+            render={({ field }) => (
+              <FormItem className="flex flex-col space-y-4 w-full">
+                <div className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm w-full">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center">
+                      <Image className="mr-2 h-4 w-4 text-primary" />
+                      <FormLabel className="font-medium">Background Image</FormLabel>
+                    </div>
+                    <FormDescription className="text-xs">
+                      An image displayed behind slide content
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </div>
+                
+                {/* Show image upload options when background image is enabled */}
+                {field.value && (
+                  <div className="ml-2 pl-4 border-l-2 border-primary/20 space-y-3">
+                    <h4 className="text-sm font-medium">Background Image Source</h4>
+                    <ImageSourceFormField
+                      fieldName={`slides.${slideIndex}.backgroundImage.source` as ImageSourceFieldPath}
+                      form={form}
+                    />
+                    <OpacityFormField
+                      fieldName={`slides.${slideIndex}.backgroundImage.style.opacity` as ImageStyleOpacityFieldPath}
+                      form={form}
+                      label={"Opacity"}
+                      className="w-full"
+                    />
+                  </div>
+                )}
+              </FormItem>
+            )}
+          />
+        </div>
+        
+        <Separator className="my-2" />
       </div>
     );
   }
@@ -233,7 +999,7 @@ export function StyleMenu({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Element</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this element? This action cannot be undone.
+              Are you sure you want to delete this {isTextElement(type) ? "text " : ""}element? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

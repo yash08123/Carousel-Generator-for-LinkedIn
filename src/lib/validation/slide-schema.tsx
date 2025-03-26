@@ -44,6 +44,12 @@ export const CommonSlideSchema = z.object({
   elements: z.array(ElementSchema).default([]),
   backgroundImage: ImageSchema.default(DEFAULT_BACKGROUND_IMAGE_INPUT),
   slideStyle: z.string().optional(),
+  // Element visibility toggles
+  showTagline: z.boolean().default(true),
+  showTitle: z.boolean().default(true),
+  showParagraph: z.boolean().default(true),
+  showSwipeIndicator: z.boolean().default(true),
+  showBackgroundImage: z.boolean().default(false),
 });
 
 export const UnstyledMultiSlideSchema = z.array(UnstyledSlideSchema);

@@ -34,7 +34,7 @@ export function Description({
       label={""}
       placeholder={"Your description here"}
       className={cn(
-        `font-medium`,
+        `font-medium w-full max-w-full`,
         textStyleToClasses({
           style: style,
           sizes: ["text-xl", "text-lg", "text-base"],
@@ -44,6 +44,13 @@ export function Description({
       )}
       style={{
         color: config.theme.secondary,
+        ...(style.numericFontSize ? { fontSize: `${style.numericFontSize}px` } : {}),
+        width: '100%',
+        minWidth: '100%',
+        boxSizing: 'border-box',
+        display: 'block',
+        ...(style.lineHeight ? { lineHeight: style.lineHeight } : {}),
+        ...(style.wordSpacing !== undefined ? { wordSpacing: `${style.wordSpacing}px` } : {})
       }}
     />
   );

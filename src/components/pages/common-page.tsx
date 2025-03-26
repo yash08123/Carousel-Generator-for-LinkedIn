@@ -16,6 +16,7 @@ import {
   ElementFieldPath,
   SlideFieldPath,
   TextFieldPath,
+  ImageSourceFieldPath,
 } from "@/lib/document-form-types";
 import { PageFrame } from "@/components/pages/page-frame";
 import { PageLayout } from "@/components/pages/page-layout";
@@ -47,7 +48,7 @@ export function CommonPage({
 }) {
   const LAYOUT_GAP = 8;
   const FRAME_PADDING = 40;
-  const backgroundImageField = fieldName + ".backgroundImage";
+  const backgroundImageField = (fieldName + ".backgroundImage.source") as ImageSourceFieldPath;
   const [elementsHeight, setElementsHeight] = useState<number | null>(null);
   const [footerRef, footerDimensions] = useElementSize();
   const inputRefs = React.useRef<HTMLDivElement[]>([]);
@@ -93,16 +94,16 @@ export function CommonPage({
   // Custom layout classes based on content slide style
   const getLayoutClasses = () => {
     if (contentSlideStyle === ContentSlideStyle.Text) {
-      return "flex flex-col items-center justify-center text-center";
+      return "flex flex-col items-center justify-center text-center w-full max-w-full";
     } else if (contentSlideStyle === ContentSlideStyle.Image) {
-      return "flex flex-col items-center justify-center h-full";
+      return "flex flex-col items-center justify-center h-full w-full";
     } else if (contentSlideStyle === ContentSlideStyle.Screenshot) {
-      return "flex flex-col gap-4";
+      return "flex flex-col gap-4 w-full";
     } else if (isHeadshotSlide) {
-      return "flex flex-col items-center justify-between gap-4";
+      return "flex flex-col items-center justify-between gap-4 w-full";
     } else {
       // Default layout for Text+Image (make sure title and image have good spacing)
-      return "flex flex-col items-center justify-between gap-6 h-full"; 
+      return "flex flex-col items-center justify-center gap-6 h-full w-full"; 
     }
   };
 
@@ -128,6 +129,22 @@ export function CommonPage({
   
   // Apply specific styles to elements based on slide type
   const getElementStyle = (element: any, index: number) => {
+    // Default styles for all title elements - centered with consistent margins
+    if (element.type === ElementType.enum.Title) {
+      return "text-center w-full my-4 max-w-[90%]";
+    }
+    
+    // Add spacing for subtitle elements
+    if (element.type === ElementType.enum.Subtitle) {
+      return "text-center w-full mb-6 mt-2 max-w-[85%]";
+    }
+    
+    // Add spacing for description elements
+    if (element.type === ElementType.enum.Description) {
+      return "text-center w-full mb-4 max-w-[80%]";
+    }
+    
+    // Specific slide type styles overrides
     if (contentSlideStyle === ContentSlideStyle.Screenshot && 
         element.type === ElementType.enum.ContentImage) {
       return "p-4 border rounded-md shadow-md bg-muted/20";
@@ -138,21 +155,17 @@ export function CommonPage({
       return "max-h-[90%] flex-1 w-full";
     }
     
-    // For Text+Image slides (which is the default), make title more prominent and image larger
-    if (!contentSlideStyle && element.type === ElementType.enum.Title) {
-      return "text-center w-full mb-4 max-w-[90%]";
-    }
-    
+    // For Text+Image slides, position image appropriately
     if (!contentSlideStyle && element.type === ElementType.enum.ContentImage) {
-      return "max-h-[70%] w-full flex-1";
+      return "max-h-[60%] w-full mt-auto";
     }
     
     if (isHeadshotSlide && element.type === ElementType.enum.Avatar) {
-      return "max-w-[70%] max-h-[50%] overflow-hidden"; 
+      return "max-w-[70%] max-h-[50%] overflow-hidden mt-4"; 
     }
     
     if (element.type === ElementType.enum.Emoji) {
-      return "max-w-full overflow-hidden";
+      return "max-w-full overflow-hidden mb-4";
     }
     
     return "";
@@ -160,33 +173,48 @@ export function CommonPage({
 
   // Filter out elements based on slide style to prevent overcrowding
   const filteredElements = React.useMemo(() => {
+    // First apply visibility toggles to filter out elements
+    let visibleElements = slide.elements.filter(element => {
+      // Filter based on element type and corresponding toggle setting
+      if (element.type === ElementType.enum.Title) {
+        return slide.showTitle;
+      } else if (element.type === ElementType.enum.Subtitle) {
+        return slide.showTagline;
+      } else if (element.type === ElementType.enum.Description) {
+        return slide.showParagraph;
+      }
+      // Always show other element types by default (images, emoji, etc.)
+      return true;
+    });
+
+    // Then apply slide style specific filtering
     // For Image slides, only keep images (remove titles, descriptions, etc.)
     if (contentSlideStyle === ContentSlideStyle.Image) {
-      return slide.elements.filter(element => 
+      return visibleElements.filter(element => 
         element.type === ElementType.enum.ContentImage
       );
     }
     
     // For Text+Image slides (default), remove descriptions
     if (!contentSlideStyle || contentSlideStyle === undefined) {
-      return slide.elements.filter(element => 
+      return visibleElements.filter(element => 
         element.type !== ElementType.enum.Description
       );
     }
     
     // For Screenshot slides, remove descriptions
     if (contentSlideStyle === ContentSlideStyle.Screenshot) {
-      return slide.elements.filter(element => 
+      return visibleElements.filter(element => 
         element.type !== ElementType.enum.Description
       );
     }
     
-    // For all other slide types, keep all elements
-    return slide.elements;
-  }, [slide.elements, contentSlideStyle]);
+    // For all other slide types, keep all visible elements
+    return visibleElements;
+  }, [slide.elements, contentSlideStyle, slide.showTitle, slide.showTagline, slide.showParagraph]);
 
   return (
-    <PageBase size={size} fieldName={backgroundImageField}>
+    <PageBase size={size} fieldName={(fieldName + ".backgroundImage") as string}>
       <BackgroundLayer background={config.theme.background} className="-z-30" />
       {config.elements && config.elements.enabled && (
         <BackgroundElementsLayer 
@@ -196,14 +224,14 @@ export function CommonPage({
           secondaryColor={config.theme.secondary}
         />
       )}
-      {slide.backgroundImage?.source.src ? (
+      {slide.backgroundImage?.source.src && slide.showBackgroundImage ? (
         <BackgroundImageLayer image={slide.backgroundImage} className="-z-10" />
       ) : null}
       <PageFrame
         fieldName={backgroundImageField}
         className={cn("p-10", className)}
       >
-        <PageLayout fieldName={backgroundImageField} className={cn(getLayoutClasses(), "max-h-[calc(100%-2rem)] overflow-hidden")}>
+        <PageLayout fieldName={backgroundImageField} className={cn(getLayoutClasses(), "max-h-[calc(100%-2rem)] overflow-hidden w-full px-4")}>
           {filteredElements.map((element, index) => {
             // Use the actual index from the original slide.elements array to maintain correct field paths
             const originalIndex = slide.elements.findIndex(e => e === element);
@@ -299,8 +327,8 @@ export function CommonPage({
             />
           ) : null}
           
-          {/* Add Swipe Indicator for Intro slides */}
-          {isIntroSlide && (
+          {/* Add Swipe Indicator for Intro slides only if toggle is enabled */}
+          {isIntroSlide && slide.showSwipeIndicator && (
             <SwipeIndicator 
               fieldName={fieldName} 
               index={index}

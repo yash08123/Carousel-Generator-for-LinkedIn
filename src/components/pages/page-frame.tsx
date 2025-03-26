@@ -4,14 +4,15 @@ import { usePagerContext } from "@/lib/providers/pager-context";
 import { getParent, getSlideNumber } from "@/lib/field-path";
 import { useSelection } from "@/lib/hooks/use-selection";
 import { useSelectionContext } from "@/lib/providers/selection-context";
+import { ImageSourceFieldPath } from "@/lib/document-form-types";
 
 export function PageFrame({
-  children,
   fieldName,
+  children,
   className,
 }: {
+  fieldName: ImageSourceFieldPath;
   children: React.ReactNode;
-  fieldName: string;
   className?: string;
 }) {
   const { setCurrentPage } = usePagerContext();
@@ -20,10 +21,14 @@ export function PageFrame({
 
   return (
     <div
-      className={cn("flex flex-col h-full w-full", className)}
-      onClick={(event) => {
+      className={cn(
+        "flex flex-col justify-between h-full overflow-hidden rounded-xl border border-border/50 shadow-md", 
+        className
+      )}
+      tabIndex={0}
+      onClick={() => {
         setCurrentPage(pageNumber);
-        setCurrentSelection(fieldName, event);
+        setCurrentSelection(fieldName, null);
       }}
     >
       {children}

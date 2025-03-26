@@ -123,6 +123,7 @@ export function useComponentPrinter() {
       const clone = current.cloneNode(true);
       // Change from horizontal to vertical for printing and remove gap
       proxyImgSources(clone);
+      preserveComputedStyles(clone);
       removeSelectionStyleById(clone, "page-base-");
       removeSelectionStyleById(clone, "content-image-");
       removePaddingStyleById(clone, "carousel-item-");
@@ -163,7 +164,15 @@ export function useComponentPrinter() {
 
       // Increase scale factor to ensure better quality and fix element positioning
       const SCALE_TO_LINKEDIN_INTRINSIC_SIZE = 2.5;
-      // const fontEmbedCss = await getFontEmbedCSS(html);
+      const fontEmbedCss = await getFontEmbedCSS(html);
+      
+      // Add font CSS to the document
+      if (fontEmbedCss) {
+        const style = contentDocument.createElement('style');
+        style.textContent = fontEmbedCss;
+        contentDocument.head.appendChild(style);
+      }
+      
       const options: HtmlToPdfOptions = {
         margin: [0, 0, 0, 0],
         filename: watch("filename"),
@@ -253,38 +262,185 @@ function removeStyleById(html: HTMLElement, id: string, classNames: string) {
   const elements = Array.from(
     html.querySelectorAll(`[id^=${id}]`)
   ) as HTMLDivElement[];
+  
   elements.forEach((element) => {
     element.className = removeClassnames(element, classNames);
   });
 }
 
 function removeClassnames(element: HTMLDivElement, classNames: string): string {
-  return element.className
+  const className = getClassNameAsString(element);
+  if (!className) return '';
+  
+  return className
     .split(" ")
     .filter((el) => !classNames.split(" ").includes(el))
     .join(" ");
 }
 
 function insertFonts(element: HTMLElement) {
-  // Get all elements in the document
-  const allElements = Array.from(
-    element.getElementsByTagName(`textarea`)
-  ) as HTMLTextAreaElement[];
+  // Get all elements with potential font classes, not just textareas
+  const allElements = element.querySelectorAll('*');
+  
+  // Font class to actual font-family mapping
+  const fontMap: Record<string, string> = {
+    'font-dm-sans': "'DM Sans', sans-serif",
+    'font-dm-serif-display': "'DM Serif Display', serif",
+    'font-geist-sans': "'Geist Sans', sans-serif",
+    'font-montserrat': "'Montserrat', sans-serif",
+    'font-pt-serif': "'PT Serif', serif",
+    'font-roboto': "'Roboto', sans-serif",
+    'font-roboto-condensed': "'Roboto Condensed', sans-serif",
+    'font-ultra': "'Ultra', serif",
+    'font-inter': "'Inter', sans-serif",
+    'font-syne': "'Syne', sans-serif",
+    'font-archivo-black': "'Archivo Black', sans-serif",
+    'font-playfair-display': "'Playfair Display', serif",
+    'font-poppins': "'Poppins', sans-serif",
+    'font-oswald': "'Oswald', sans-serif",
+    'font-merriweather': "'Merriweather', serif",
+    'font-lato': "'Lato', sans-serif",
+    'font-raleway': "'Raleway', sans-serif",
+    'font-quicksand': "'Quicksand', sans-serif",
+    'font-bebas-neue': "'Bebas Neue', sans-serif"
+  };
 
   // Iterate through each element
-  allElements.forEach(function (element) {
-    let tailwindFonts = element.className
+  allElements.forEach(function (el) {
+    const className = getClassNameAsString(el);
+    if (!className) return;
+    
+    // Find font classes
+    const tailwindFonts = className
       .split(" ")
       .filter((cn) => cn.startsWith("font-"));
 
-    // Get the computed style of the element
-    tailwindFonts.forEach((font) => {
-      const fontFaceValue = getComputedStyle(
-        element.ownerDocument.body
-      ).getPropertyValue("--" + font); // Font var name convention is starts with `--font`
-      if (fontFaceValue) {
-        element.style.fontFamily = fontFaceValue;
+    if (tailwindFonts.length === 0) return;
+
+    const htmlEl = el as HTMLElement;
+    // Apply the explicit font-family
+    tailwindFonts.forEach((fontClass) => {
+      const explicitFontFamily = fontMap[fontClass];
+      if (explicitFontFamily) {
+        htmlEl.style.fontFamily = explicitFontFamily;
+      } else {
+        // Fallback to CSS variable method if not in the map
+        const fontFaceValue = getComputedStyle(
+          htmlEl.ownerDocument.body
+        ).getPropertyValue("--" + fontClass);
+        
+        if (fontFaceValue) {
+          htmlEl.style.fontFamily = fontFaceValue;
+        }
       }
     });
   });
+}
+
+async function getFontEmbedCSS(element: HTMLElement): Promise<string> {
+  // Get all font families used in the document
+  const fontFamilies = new Set<string>();
+  
+  element.querySelectorAll('*').forEach((el) => {
+    const className = getClassNameAsString(el);
+    if (!className) return;
+    
+    const tailwindFonts = className
+      .split(" ")
+      .filter((cn) => cn.startsWith("font-"));
+    
+    if (tailwindFonts.length === 0) return;
+    
+    const htmlEl = el as HTMLElement;
+    tailwindFonts.forEach((font) => {
+      const fontFaceValue = getComputedStyle(
+        htmlEl.ownerDocument.body
+      ).getPropertyValue("--" + font);
+      
+      if (fontFaceValue) {
+        fontFamilies.add(fontFaceValue);
+      }
+    });
+  });
+  
+  // Collect all CSS rules for fonts
+  let fontCss = '';
+  const styleSheets = Array.from(document.styleSheets);
+  
+  styleSheets.forEach(sheet => {
+    try {
+      const rules = Array.from(sheet.cssRules || []);
+      rules.forEach(rule => {
+        if (rule instanceof CSSFontFaceRule) {
+          const fontFamily = rule.style.getPropertyValue('font-family').replace(/['";]/g, '');
+          
+          // Check if this font-face rule is for one of our used fonts
+          fontFamilies.forEach(usedFont => {
+            if (fontFamily.includes(usedFont)) {
+              fontCss += rule.cssText + '\n';
+            }
+          });
+        }
+      });
+    } catch (e) {
+      // Skip cross-origin stylesheets
+      console.warn('Could not access stylesheet:', e);
+    }
+  });
+  
+  return fontCss;
+}
+
+function preserveComputedStyles(element: HTMLElement) {
+  // Get all elements with styling
+  const allElements = element.querySelectorAll('*');
+
+  // Properties we want to preserve in the export
+  const propertiesToPreserve = [
+    'font-family', 'font-size', 'font-weight', 'font-style',
+    'line-height', 'color', 'background-color', 'text-align',
+    'letter-spacing', 'text-decoration', 'text-transform'
+  ];
+
+  // Iterate through each element
+  allElements.forEach(function (el) {
+    const className = getClassNameAsString(el);
+    if (!className) return;
+    
+    const htmlEl = el as HTMLElement;
+    
+    // Get computed styles
+    const computedStyle = window.getComputedStyle(htmlEl);
+    
+    // Apply each property as inline style if it exists
+    propertiesToPreserve.forEach(prop => {
+      const value = computedStyle.getPropertyValue(prop);
+      if (value && value !== '') {
+        htmlEl.style.setProperty(prop, value);
+      }
+    });
+  });
+}
+
+// Add this helper function before other functions
+function getClassNameAsString(element: Element): string {
+  // Handle SVG elements which have className as SVGAnimatedString
+  if (element instanceof SVGElement && 'className' in element) {
+    const svgClassName = element.className;
+    if (svgClassName && typeof svgClassName === 'object' && 'baseVal' in svgClassName) {
+      return svgClassName.baseVal;
+    }
+  }
+  
+  // Handle regular HTML elements
+  if ('className' in element && element.className) {
+    if (typeof element.className === 'string') {
+      return element.className;
+    } else {
+      // For any other case, try to stringify
+      return String(element.className);
+    }
+  }
+  
+  return '';
 }
